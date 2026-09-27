@@ -44,7 +44,7 @@ services:
       MONGODB_DATABASE: ${MONGODB_DATABASE:-cali_house_db}
       MONGODB_COLLECTION: ${MONGODB_COLLECTION:-predictions}
       BACKEND_PORT: ${BACKEND_PORT:-8000}
-      MODEL_SCHEMA_PATH: /app/ai-models/models/schema.json
+      MODEL_SCHEMA_PATH: /app/models/schema.json
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -60,7 +60,9 @@ services:
     container_name: cali-frontend
     environment:
       PORT: 3000
-      API_URL: ${API_URL:-http://localhost:8000}
+      API_URL: ${API_URL-/}
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      BACKEND_TIMEOUT_SECONDS: ${BACKEND_TIMEOUT_SECONDS:-30}
       FRONTEND_PORT: ${FRONTEND_PORT:-3000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
     ports:
