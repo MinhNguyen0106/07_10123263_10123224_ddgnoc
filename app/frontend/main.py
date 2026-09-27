@@ -1,4 +1,7 @@
+import logging
 import os
+import time
+import uuid
 from datetime import datetime, timezone
 
 import requests
@@ -6,6 +9,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from starlette.requests import Request
+
+logger = logging.getLogger("frontend_service")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000").rstrip("/")
 BACKEND_TIMEOUT_SECONDS = float(os.getenv("BACKEND_TIMEOUT_SECONDS", "30"))
@@ -33,6 +43,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_logger(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    request.state.request_id = request_id
+    start = time.perf_counter()
+    logger.info("frontend req=%s start method=%s path=%s", request_id, request.method, request.url.path)
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.exception("frontend req=%s error elapsed_ms=%s", request_id, elapsed_ms)
+        raise
+    elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    logger.info("frontend req=%s status=%s total_duration_ms=%s", request_id, response.status_code, elapsed_ms)
+    return response
 
 HTML_PAGE = f"""
 <!DOCTYPE html>
@@ -175,12 +203,14 @@ def health():
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 async def backend_proxy(path: str, request: Request):
+    request_id = getattr(request.state, "request_id", request.headers.get("x-request-id") or uuid.uuid4().hex)
     body = await request.body()
     headers = {
         key: value
         for key, value in request.headers.items()
         if key.lower() not in {"host", "content-length"}
     }
+    headers["X-Request-ID"] = request_id
     try:
         response = requests.request(
             method=request.method,

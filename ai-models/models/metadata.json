@@ -12,9 +12,10 @@
   },
   "performance_summary": "Model is suitable for efficient deployment and demonstrates stable generalization on the California Housing test set.",
   "environment_versions": {
-    "scikit-learn": "1.6.1",
+    "scikit-learn": "1.9.1",
     "pandas": "2.2.3",
     "numpy": "2.1.3",
-    "joblib": "1.6.0"
+    "joblib": "1.6.0",
+    "scipy": "1.16.3"
   }
 }
