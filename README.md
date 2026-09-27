@@ -171,20 +171,36 @@ Luồng hoạt động như sau:
 6. Backend lưu record vào MongoDB và trả kết quả cho frontend. 
 7. Mỗi request có `request_id` được log rõ ràng để dễ debug và bảo vệ demo.
 
-## 10. Hướng dẫn cập nhật tunnel/ngrok
+## 10. Public hệ thống qua một cổng ngrok
 
-Khi đã public hệ thống qua tunnel hoặc ngrok, cần cập nhật địa chỉ mới trong `.env` và khởi động lại services nếu cần. Ví dụ:
+Không cần public riêng Backend hoặc AI Service. Frontend có reverse proxy:
 
-```env
-AI_SERVICE_URL=https://<your-ngrok-id>.ngrok-free.app
-API_URL=https://<your-backend-domain>.ngrok-free.app
-FRONTEND_URL=https://<your-frontend-domain>.ngrok-free.app
+```text
+Trình duyệt -> ngrok -> Frontend:3000 -> Backend:8000 -> AI Service:8001
+                                             └------> MongoDB
 ```
 
-Lưu ý:
+Giữ các giá trị sau trong `.env`:
 
-- Nếu ngrok đổi link sau mỗi lần khởi động, cần cập nhật lại `.env` và ghi log thời gian đổi link.
-- Đối với báo cáo và demo, nên ghi rõ lần cập nhật mới nhất và link đang dùng.
+```env
+API_URL=/
+BACKEND_URL=http://backend:8000
+AI_SERVICE_URL=http://ai-service:8001
+```
+
+Khởi động hệ thống rồi tạo tunnel tới đúng cổng Frontend:
+
+```bash
+docker compose up --build -d
+ngrok http 3000
+```
+
+Mở URL HTTPS do ngrok cấp. Khi trình duyệt gọi `/api/predict`, request đi qua Frontend
+và được chuyển tiếp nội bộ tới Backend; Backend gọi AI Service qua Docker network.
+Vì vậy trình duyệt không cần truy cập trực tiếp các cổng `8000` hoặc `8001`.
+
+Nếu ngrok đổi link sau mỗi lần khởi động thì chỉ cần dùng link mới; không phải đổi
+`API_URL`, `BACKEND_URL` hoặc `AI_SERVICE_URL`.
 
 ## 11. Dùng thử trên trình duyệt
 

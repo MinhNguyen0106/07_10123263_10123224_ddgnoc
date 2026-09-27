@@ -1,11 +1,14 @@
 import os
 from datetime import datetime, timezone
 
+import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
+from starlette.requests import Request
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000").rstrip("/")
+BACKEND_TIMEOUT_SECONDS = float(os.getenv("BACKEND_TIMEOUT_SECONDS", "30"))
 FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "3000"))
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:8000",
@@ -57,16 +60,16 @@ HTML_PAGE = f"""
         <p>Nhập thông tin bất động sản để ước tính giá trị trung bình của căn nhà.</p>
         <form id="prediction-form">
             <div class="two-col">
-                <div class="field"><label for="longitude">Kinh độ</label><input id="longitude" name="longitude" type="number" step="0.01" placeholder="-118.24" /></div>
-                <div class="field"><label for="latitude">Vĩ độ</label><input id="latitude" name="latitude" type="number" step="0.01" placeholder="34.05" /></div>
-                <div class="field"><label for="housing_median_age">Tuổi trung bình nhà</label><input id="housing_median_age" name="housing_median_age" type="number" step="0.1" placeholder="30" /></div>
-                <div class="field"><label for="total_rooms">Tổng phòng</label><input id="total_rooms" name="total_rooms" type="number" step="1" placeholder="2400" /></div>
-                <div class="field"><label for="total_bedrooms">Tổng phòng ngủ</label><input id="total_bedrooms" name="total_bedrooms" type="number" step="1" placeholder="500" /></div>
-                <div class="field"><label for="population">Dân số</label><input id="population" name="population" type="number" step="1" placeholder="1200" /></div>
-                <div class="field"><label for="households">Số hộ gia đình</label><input id="households" name="households" type="number" step="1" placeholder="400" /></div>
-                <div class="field"><label for="median_income">Thu nhập trung bình</label><input id="median_income" name="median_income" type="number" step="0.01" placeholder="4.5" /></div>
+                <div class="field"><label for="longitude">Kinh độ</label><input id="longitude" name="longitude" type="number" step="0.01" placeholder="-118.24" required /></div>
+                <div class="field"><label for="latitude">Vĩ độ</label><input id="latitude" name="latitude" type="number" step="0.01" placeholder="34.05" required /></div>
+                <div class="field"><label for="housing_median_age">Tuổi trung bình nhà</label><input id="housing_median_age" name="housing_median_age" type="number" step="0.1" placeholder="30" required /></div>
+                <div class="field"><label for="total_rooms">Tổng phòng</label><input id="total_rooms" name="total_rooms" type="number" step="1" placeholder="2400" required /></div>
+                <div class="field"><label for="total_bedrooms">Tổng phòng ngủ</label><input id="total_bedrooms" name="total_bedrooms" type="number" step="1" placeholder="500" required /></div>
+                <div class="field"><label for="population">Dân số</label><input id="population" name="population" type="number" step="1" placeholder="1200" required /></div>
+                <div class="field"><label for="households">Số hộ gia đình</label><input id="households" name="households" type="number" step="1" placeholder="400" required /></div>
+                <div class="field"><label for="median_income">Thu nhập trung bình</label><input id="median_income" name="median_income" type="number" step="0.01" placeholder="4.5" required /></div>
                 <div class="field" style="grid-column: 1 / -1;"><label for="ocean_proximity">Vị trí gần biển</label>
-                    <select id="ocean_proximity" name="ocean_proximity">
+                    <select id="ocean_proximity" name="ocean_proximity" required>
                         <option value="" selected disabled>Chọn một tùy chọn</option>
                         <option value="<1H OCEAN"><1H OCEAN</option>
                         <option value="INLAND">INLAND</option>
@@ -83,7 +86,7 @@ HTML_PAGE = f"""
     </div>
 
     <script>
-        const apiBase = "{API_URL}";
+        const apiBase = "{os.getenv("API_URL", "http://localhost:8000")}".replace(/\/+$/, "");
         const form = document.getElementById('prediction-form');
         const resultBox = document.getElementById('result');
         const statusBox = document.getElementById('status');
@@ -109,6 +112,15 @@ HTML_PAGE = f"""
 
         form.addEventListener('submit', async (event) => {{
             event.preventDefault();
+            if (!form.reportValidity()) return;
+
+            const numberFields = ['longitude', 'latitude', 'housing_median_age', 'total_rooms',
+                'total_bedrooms', 'population', 'households', 'median_income'];
+            if (numberFields.some((id) => !Number.isFinite(Number(document.getElementById(id).value)))) {{
+                statusBox.textContent = 'Trạng thái: vui lòng nhập đủ các giá trị số';
+                return;
+            }}
+
             const payload = {{
                 features: {{
                     longitude: Number(document.getElementById('longitude').value),
@@ -159,6 +171,43 @@ HTML_PAGE = f"""
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "frontend", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+async def backend_proxy(path: str, request: Request):
+    body = await request.body()
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in {"host", "content-length"}
+    }
+    try:
+        response = requests.request(
+            method=request.method,
+            url=f"{BACKEND_URL}/api/{path}",
+            params=request.query_params,
+            headers=headers,
+            data=body,
+            timeout=BACKEND_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        return Response(
+            content='{"detail":{"error":"backend_unavailable","detail":"Backend service is unavailable."}}',
+            status_code=502,
+            media_type="application/json",
+        )
+
+    response_headers = {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower() not in {"content-length", "transfer-encoding", "connection"}
+    }
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        headers=response_headers,
+        media_type=response.headers.get("content-type"),
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
