@@ -23,18 +23,18 @@ Model nhận 9 đặc trưng thô. Pipeline tạo thêm các đặc trưng `room
 - **Giấy phép được ghi nhận:** [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/); xem thêm [`DATA.md`](ai-models/data/DATA.md).
 - **File trong repository:** `ai-models/data/housing.csv.zip`. Notebook đọc trực tiếp CSV bên trong ZIP, không bắt buộc giải nén để chạy.
 
-| Cột | Kiểu | Mô tả / vai trò |
-|---|---|---|
-| `longitude` | Số | Kinh độ khu vực — input. |
-| `latitude` | Số | Vĩ độ khu vực — input. |
-| `housing_median_age` | Số | Tuổi trung vị nhà ở trong khu vực — input. |
-| `total_rooms` | Số | Tổng số phòng — input. |
-| `total_bedrooms` | Số | Tổng số phòng ngủ — input; có giá trị thiếu trong dataset. |
-| `population` | Số | Dân số khu vực — input. |
-| `households` | Số | Số hộ gia đình — input. |
-| `median_income` | Số | Thu nhập trung vị theo đơn vị của dataset — input. |
-| `ocean_proximity` | Category | Nhóm vị trí tương đối với biển/vịnh — input. |
-| `median_house_value` | Số | Giá trị trung vị nhà ở — target. |
+| Cột                  | Kiểu     | Mô tả / vai trò                                            |
+| -------------------- | -------- | ---------------------------------------------------------- |
+| `longitude`          | Số       | Kinh độ khu vực — input.                                   |
+| `latitude`           | Số       | Vĩ độ khu vực — input.                                     |
+| `housing_median_age` | Số       | Tuổi trung vị nhà ở trong khu vực — input.                 |
+| `total_rooms`        | Số       | Tổng số phòng — input.                                     |
+| `total_bedrooms`     | Số       | Tổng số phòng ngủ — input; có giá trị thiếu trong dataset. |
+| `population`         | Số       | Dân số khu vực — input.                                    |
+| `households`         | Số       | Số hộ gia đình — input.                                    |
+| `median_income`      | Số       | Thu nhập trung vị theo đơn vị của dataset — input.         |
+| `ocean_proximity`    | Category | Nhóm vị trí tương đối với biển/vịnh — input.               |
+| `median_house_value` | Số       | Giá trị trung vị nhà ở — target.                           |
 
 **Giải nén tùy chọn**
 
@@ -54,12 +54,12 @@ python -m zipfile -e ai-models/data/housing.csv.zip ai-models/data/extracted
 
 Bảng dưới đây là kết quả đã lưu trong `03_train.ipynb`, không phải metric của artifact đang được API nạp. RMSE và MAE càng thấp càng tốt; R² càng cao càng tốt.
 
-| Model | CV RMSE (USD) | Test RMSE (USD) | Test MAE (USD) | Test R² |
-|---|---:|---:|---:|---:|
-| Linear Regression (baseline) | — | 69,127.04 | 49,645.49 | 0.6353 |
-| Decision Tree | 60,506.68 | 60,797.85 | 39,990.45 | 0.7179 |
-| Random Forest | 50,270.72 | 49,697.39 | 31,942.22 | 0.8115 |
-| Gradient Boosting | 47,251.39 | 46,387.57 | 30,251.96 | 0.8358 |
+| Model                        | CV RMSE (USD) | Test RMSE (USD) | Test MAE (USD) | Test R² |
+| ---------------------------- | ------------: | --------------: | -------------: | ------: |
+| Linear Regression (baseline) |             — |       69,127.04 |      49,645.49 |  0.6353 |
+| Decision Tree                |     60,506.68 |       60,797.85 |      39,990.45 |  0.7179 |
+| Random Forest                |     50,270.72 |       49,697.39 |      31,942.22 |  0.8115 |
+| Gradient Boosting            |     47,251.39 |       46,387.57 |      30,251.96 |  0.8358 |
 
 **Model được chọn:** Gradient Boosting có CV RMSE và Test RMSE thấp nhất, đồng thời Test R² cao nhất trong bảng trên. Đây là lý do chọn model cho artifact. Các số dưới đây là từ metadata của artifact đang chạy, nên khác với snapshot notebook:
 
@@ -157,24 +157,24 @@ Lệnh `evaluate.py` huấn luyện lại và cập nhật artifacts trong `ai-m
 
 Giá trị mặc định dưới đây được lấy từ `.env.example`, `docker-compose.yml` và cấu hình service. Các URL nội bộ Docker cần dùng service name, không đổi thành `localhost` khi chạy trong container.
 
-| Biến | Mặc định | Ý nghĩa |
-|---|---|---|
-| `AI_SERVICE_URL` | `http://ai-service:8001` | Backend gọi AI Service. |
-| `AI_SERVICE_TIMEOUT_SECONDS` | `30` | Thời gian chờ Backend gọi AI Service. |
-| `BACKEND_URL` | `http://backend:8000` | Frontend proxy gọi Backend. |
-| `BACKEND_TIMEOUT_SECONDS` | `30` | Thời gian chờ Frontend gọi Backend. |
-| `API_URL` | `/` | Base URL API của trình duyệt; `/` dùng cùng host Frontend. |
-| `FRONTEND_PORT` | `3000` | Cổng Frontend publish ra máy host. |
-| `BACKEND_PORT` | `8000` | Cổng Backend publish ra máy host. |
-| `AI_SERVICE_PORT` | `8001` | Cổng AI Service publish ra máy host. |
-| `MODEL_PATH` | `/app/models/model.joblib` | Đường dẫn model trong container AI. |
-| `MODEL_METADATA_PATH` | `/app/models/metadata.json` | Đường dẫn metadata trong container AI. |
-| `MODEL_SCHEMA_PATH` | `/app/models/schema.json` | Đường dẫn schema trong container. |
-| `MONGODB_URI` | `mongodb://mongodb:27017` | URI kết nối MongoDB từ Backend. |
-| `MONGODB_DATABASE` | `cali_house_db` | Database lưu prediction history. |
-| `MONGODB_COLLECTION` | `predictions` | Collection lưu prediction history. |
-| `CORS_ORIGINS` | `localhost` và `127.0.0.1`, ports 3000/8000 | Danh sách origin được phép, phân tách bằng dấu phẩy. |
-| `PORT` | Được Compose đặt lần lượt là `3000`, `8000`, `8001` | Cổng Uvicorn trong từng container; thông thường không cần khai báo thủ công trong `.env`. |
+| Biến                         | Mặc định                                            | Ý nghĩa                                                                                   |
+| ---------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `AI_SERVICE_URL`             | `http://ai-service:8001`                            | Backend gọi AI Service.                                                                   |
+| `AI_SERVICE_TIMEOUT_SECONDS` | `30`                                                | Thời gian chờ Backend gọi AI Service.                                                     |
+| `BACKEND_URL`                | `http://backend:8000`                               | Frontend proxy gọi Backend.                                                               |
+| `BACKEND_TIMEOUT_SECONDS`    | `30`                                                | Thời gian chờ Frontend gọi Backend.                                                       |
+| `API_URL`                    | `/`                                                 | Base URL API của trình duyệt; `/` dùng cùng host Frontend.                                |
+| `FRONTEND_PORT`              | `3000`                                              | Cổng Frontend publish ra máy host.                                                        |
+| `BACKEND_PORT`               | `8000`                                              | Cổng Backend publish ra máy host.                                                         |
+| `AI_SERVICE_PORT`            | `8001`                                              | Cổng AI Service publish ra máy host.                                                      |
+| `MODEL_PATH`                 | `/app/models/model.joblib`                          | Đường dẫn model trong container AI.                                                       |
+| `MODEL_METADATA_PATH`        | `/app/models/metadata.json`                         | Đường dẫn metadata trong container AI.                                                    |
+| `MODEL_SCHEMA_PATH`          | `/app/models/schema.json`                           | Đường dẫn schema trong container.                                                         |
+| `MONGODB_URI`                | `mongodb://mongodb:27017`                           | URI kết nối MongoDB từ Backend.                                                           |
+| `MONGODB_DATABASE`           | `cali_house_db`                                     | Database lưu prediction history.                                                          |
+| `MONGODB_COLLECTION`         | `predictions`                                       | Collection lưu prediction history.                                                        |
+| `CORS_ORIGINS`               | `localhost` và `127.0.0.1`, ports 3000/8000         | Danh sách origin được phép, phân tách bằng dấu phẩy.                                      |
+| `PORT`                       | Được Compose đặt lần lượt là `3000`, `8000`, `8001` | Cổng Uvicorn trong từng container; thông thường không cần khai báo thủ công trong `.env`. |
 
 `MODEL_SCHEMA_PATH` được Compose cấu hình cho cả AI Service và Backend. AI Service cũng dùng `MODEL_PATH` và `MODEL_METADATA_PATH`. Public URL ngrok không phải URL nội bộ giữa các container; khi dùng `API_URL=/`, URL tunnel đổi không yêu cầu thay `BACKEND_URL` hay `AI_SERVICE_URL`.
 
@@ -198,26 +198,43 @@ Tunnel chỉ truy cập được khi máy host, Docker containers và tiến tr�
 
 ## 11. Demo online (địa chỉ App, địa chỉ AI Service/docs — kiểm tra vào mỗi thứ Hai)
 
-- **App / Frontend:** <https://applicant-underrate-psychic.ngrok-free.dev>
-- **Backend API:** được gọi qua Frontend proxy tại `https://applicant-underrate-psychic.ngrok-free.dev/api/...`; chưa có URL public riêng được xác nhận.
-- **AI Service API / Swagger:** chưa được public riêng qua ngrok hiện tại. Khi chạy local, Swagger ở <http://localhost:8001/docs> và API ở <http://localhost:8001>.
-- **Kết quả kiểm tra ngày 02/10/2026:** public `/health` trả HTTP 200; public `/api/predict` trả prediction thành công với model version `2.0.0`.
+- **App / Frontend (local, xác nhận đang chạy):** <http://localhost:3000>
+- **Backend API (local, xác nhận đang chạy):** <http://localhost:8000/docs>
+- **AI Service API / Swagger (local, xác nhận đang chạy):** <http://localhost:8001/docs>
+- **Public URL ngrok trước đó:** `https://applicant-underrate-psychic.ngrok-free.dev`
+  - Kết quả kiểm tra thực tế từ môi trường hiện tại: HTTP 404, nghĩa là tunnel/URL cũ không còn hoạt động hoặc không còn forward tới service.
+  - Do đó, URL public cũ cần được xem như **stale / chưa xác nhận** cho tới khi ngrok được khởi động lại và kiểm tra lại.
+- **Kết quả kiểm tra ngày 02/10/2026:** local stack đang chạy khỏe, với `/health` của FE/BE/AI đều trả HTTP 200 trên localhost; public tunnel cũ không còn phản hồi đúng.
 
-URL trên là địa chỉ đã ghi nhận tại lần kiểm tra ngày 02/10/2026. Domain Dev của tài khoản thường giữ nguyên qua các lần khởi động lại, nhưng tunnel chỉ hoạt động khi máy host và tiến trình ngrok đang chạy. Nhóm kiểm tra URL và `/health` vào mỗi thứ Hai (hoặc sớm hơn nếu có thay đổi).
+Domain Dev tự gán cho tài khoản thường giữ nguyên hostname qua các lần khởi động lại, nhưng URL chỉ truy cập được khi tunnel đang chạy và forward đúng tới ứng dụng. Tại lần kiểm tra ngày 03/10/2026, URL trên trả HTTP 404 ở `/health` và trang gốc; vì vậy hiện chưa xác nhận URL public hoạt động. Sau khi khởi động ngrok, kiểm tra lại `/health` và `/api/predict` trước khi chia sẻ URL. Nhóm kiểm tra URL vào mỗi thứ Hai (hoặc sớm hơn nếu có thay đổi).
 
 ## 12. Nhật ký đổi cổng/tunnel (thời điểm đổi, địa chỉ cũ → mới)
 
-Repository chưa có dữ liệu xác nhận thời điểm tạo/đổi URL trước đây. Không suy ra ngày đổi tunnel từ ngày kiểm tra.
-
-| Thời điểm | Địa chỉ cũ | Địa chỉ mới | Ghi chú |
-|---|---|---|---|
-| Chưa được ghi nhận | Không có dữ liệu | `https://applicant-underrate-psychic.ngrok-free.dev` | URL đã kiểm tra hoạt động ngày 02/10/2026; đây là mốc kiểm thử, không khẳng định ngày đổi URL. |
+| Thời điểm          | Địa chỉ cũ       | Địa chỉ mới                                 | Ghi chú                                                                                       |
+| ------------------ | ---------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 2026-10-02 14:31 +07:00 | `https://applicant-underrate-psychic.ngrok-free.dev` | Không xác nhận / công khai mới | URL cũ trả `HTTP 404` khi kiểm tra từ môi trường hiện tại; cần khởi động lại hoặc cấp URL mới. |
+| Chưa xác nhận      | Không có dữ liệu | `http://localhost:3000`                      | Bản chạy local đã được kiểm tra hoạt động thành công.                                          |
 
 Mỗi thứ Hai, kiểm tra URL hiện hành và `/health`. Nếu URL không đổi, không cần thay địa chỉ tại mục 11; có thể ghi nhận lần kiểm tra. Nếu URL thực sự đổi, cập nhật mục 11 và thêm một dòng ghi ngày cùng URL cũ → mới.
 
 ## 13. Kết quả kiểm thử hiệu năng
 
-Chưa có API load test được ghi nhận trong repository. Vì vậy, throughput, latency trung bình/percentile và error rate dưới tải **chưa được đo**; không dùng thời gian inference trong notebook làm benchmark API.
+Đã có load test local được ghi nhận trong [`docs/load_test_results.md`](docs/load_test_results.md).
+
+- Thời gian đo: `2026-10-02 20:37:42 +07:00`
+- Target: `http://localhost:3000/api/predict`
+- Concurrent users: `10`
+- Duration: `60s`
+- Total requests: `2,062`
+- Successful: `2,062`
+- Failed: `0`
+- Throughput: `26.67 req/s`
+- p50 latency: `261.49 ms`
+- p95 latency: `339.08 ms`
+- Error rate: `0%`
+- Ngưỡng mục tiêu (`p95 < 2000 ms`, `error rate < 1%`): **PASS**
+
+Nói cách khác, hệ thống hiện có kết quả load test local xác thực; không sử dụng thời gian inference notebook như benchmark API.
 
 ## 14. Hạn chế và hướng phát triển
 
