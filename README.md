@@ -1,526 +1,238 @@
 # California Housing Price Prediction
 
-## 1. Giới thiệu đề tài
+Ứng dụng dự đoán giá trung vị nhà ở tại California từ dữ liệu của một khu vực. Dự án gồm pipeline Machine Learning, AI Service, Backend, Frontend và MongoDB; các service được khởi chạy bằng Docker Compose.
 
-Dự án này xây dựng hệ thống dự đoán giá nhà California bằng cách kết hợp quy trình học máy, API, và ứng dụng web chạy trên Docker. Mục tiêu là chuyển mô hình từ notebook Colab sang sản phẩm có thể dùng thực tế với các endpoint rõ ràng, nhật ký theo `request_id`, lưu lịch sử dự đoán và khả năng triển khai qua tunnel/ngrok hoặc Docker Compose trên máy cục bộ.
+## 1. Thành viên (họ tên, MSSV, phần việc)
 
-## 2. Mục tiêu và phạm vi bài tập
+- **Nguyễn Đức Minh — 10123224:** EDA, tiền xử lý dữ liệu, huấn luyện và so sánh model; AI Service, Backend, README và báo cáo.
+- **Đào Chính Quang — 10123263:** lựa chọn dataset, PowerPoint, Frontend và kiểm thử hệ thống/API.
 
-- Tạo mô hình hồi quy dự đoán `median_house_value` từ dataset California Housing.
-- Đóng gói model dưới dạng file `model.joblib` có kèm `schema.json` và `metadata.json`.
-- Thiết kế kiến trúc 3 tầng: AI Service, Backend, Frontend.
-- Đưa toàn bộ hệ thống lên Docker Compose với MongoDB.
-- Đảm bảo luồng dữ liệu FE → BE → AI Service → FE hoạt động đúng, có log mã request và lưu lịch sử dự đoán vào MongoDB.
+## 2. Bài toán (mô tả, loại bài toán, cột mục tiêu, ý nghĩa thực tế)
 
-## 3. Tóm tắt kiến trúc hệ thống
+- **Mô tả:** ước lượng giá trị trung vị nhà ở tại một khu vực ở California từ đặc trưng địa lý, nhà ở, dân số và mức độ gần biển.
+- **Loại bài toán:** Supervised Learning — Regression.
+- **Cột mục tiêu:** `median_house_value`.
+- **Ý nghĩa thực tế:** cung cấp giá trị tham khảo từ dữ liệu khu vực; kết quả không thay thế việc định giá chuyên môn.
+
+Model nhận 9 đặc trưng thô. Pipeline tạo thêm các đặc trưng `rooms_per_household`, `bedrooms_per_room` và `population_per_household` trong quá trình dự đoán.
+
+## 3. Dữ liệu (link Kaggle, giấy phép, mô tả cột, cách giải nén dataset.zip)
+
+- **Dataset:** California Housing, 20.640 dòng và 10 cột.
+- **Nguồn:** [California Housing Prices — Kaggle](https://www.kaggle.com/datasets/camnugent/california-housing-prices).
+- **Giấy phép được ghi nhận:** [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/); xem thêm [`DATA.md`](ai-models/data/DATA.md).
+- **File trong repository:** `ai-models/data/housing.csv.zip`. Notebook đọc trực tiếp CSV bên trong ZIP, không bắt buộc giải nén để chạy.
+
+| Cột | Kiểu | Mô tả / vai trò |
+|---|---|---|
+| `longitude` | Số | Kinh độ khu vực — input. |
+| `latitude` | Số | Vĩ độ khu vực — input. |
+| `housing_median_age` | Số | Tuổi trung vị nhà ở trong khu vực — input. |
+| `total_rooms` | Số | Tổng số phòng — input. |
+| `total_bedrooms` | Số | Tổng số phòng ngủ — input; có giá trị thiếu trong dataset. |
+| `population` | Số | Dân số khu vực — input. |
+| `households` | Số | Số hộ gia đình — input. |
+| `median_income` | Số | Thu nhập trung vị theo đơn vị của dataset — input. |
+| `ocean_proximity` | Category | Nhóm vị trí tương đối với biển/vịnh — input. |
+| `median_house_value` | Số | Giá trị trung vị nhà ở — target. |
+
+**Giải nén tùy chọn**
+
+Windows PowerShell:
+
+```powershell
+Expand-Archive -LiteralPath .\ai-models\data\housing.csv.zip -DestinationPath .\ai-models\data\extracted
+```
+
+macOS/Linux hoặc Python:
+
+```bash
+python -m zipfile -e ai-models/data/housing.csv.zip ai-models/data/extracted
+```
+
+## 4. Kết quả model (bảng so sánh metric, model được chọn và lý do)
+
+Bảng dưới đây là kết quả đã lưu trong `03_train.ipynb`, không phải metric của artifact đang được API nạp. RMSE và MAE càng thấp càng tốt; R² càng cao càng tốt.
+
+| Model | CV RMSE (USD) | Test RMSE (USD) | Test MAE (USD) | Test R² |
+|---|---:|---:|---:|---:|
+| Linear Regression (baseline) | — | 69,127.04 | 49,645.49 | 0.6353 |
+| Decision Tree | 60,506.68 | 60,797.85 | 39,990.45 | 0.7179 |
+| Random Forest | 50,270.72 | 49,697.39 | 31,942.22 | 0.8115 |
+| Gradient Boosting | 47,251.39 | 46,387.57 | 30,251.96 | 0.8358 |
+
+**Model được chọn:** Gradient Boosting có CV RMSE và Test RMSE thấp nhất, đồng thời Test R² cao nhất trong bảng trên. Đây là lý do chọn model cho artifact. Các số dưới đây là từ metadata của artifact đang chạy, nên khác với snapshot notebook:
+
+- Phiên bản: `2.0.0`
+- Test RMSE: `46,794.54` USD
+- Test MAE: `30,649.37` USD
+- Test R²: `0.8329`
+- CV RMSE: `47,251.39` USD
+
+## 5. Đóng gói model (đường dẫn file model trong repo, cách export từ Colab)
+
+Các artifact dùng bởi ứng dụng:
+
+- `ai-models/models/model.joblib` — pipeline tiền xử lý và model đã huấn luyện.
+- `ai-models/models/metadata.json` — version, hyperparameter, metric và phiên bản thư viện.
+- `ai-models/models/schema.json` — tên feature, kiểu dữ liệu, khoảng số và giá trị category hợp lệ.
+
+AI Service nạp `model.joblib` khi khởi động container. Để tạo lại artifact trong repository, chạy notebook `04_evaluate.ipynb` theo thứ tự ở mục 8; cell đóng gói ghi pipeline vào `ai-models/models/model.joblib` và tạo metadata/schema tương ứng. Sau khi chạy trên Colab, tải/copy đủ ba file trên về đúng thư mục `ai-models/models/` trong repository.
+
+Artifact hiện tại được tạo với Python 3.12; các phiên bản được ghi trong metadata: scikit-learn `1.6.1`, pandas `2.2.3`, NumPy `2.1.3`, joblib `1.6.0`. Khi thay model, cần giữ các file artifact đồng bộ và dùng phiên bản thư viện tương thích.
+
+## 6. Kiến trúc hệ thống (sơ đồ FE - BE - AI - DB)
 
 ```mermaid
 flowchart LR
-    U[User] --> FE[Frontend]
-    FE --> BE[Backend FastAPI]
-    BE --> AI[AI Service FastAPI]
-    BE --> DB[(MongoDB)]
-    AI --> M[model.joblib]
+    User[Người dùng] --> FE[Frontend :3000]
+    FE -->|/api/*| BE[Backend :8000]
+    BE -->|/predict, /model-info| AI[AI Service :8001]
+    BE -->|lưu lịch sử| DB[(MongoDB :27017)]
+    AI --> Model[model.joblib]
 ```
 
-- AI Service: nạp model khi khởi động container.
-- Backend: validate đầu vào theo `schema.json`, gọi AI Service, lưu lịch sử dự đoán.
-- Frontend: form nhập dữ liệu, gửi lên backend và hiển thị kết quả.
+- **Frontend:** hiển thị form theo schema và proxy API request tới Backend.
+- **Backend:** kiểm tra dữ liệu, gọi AI Service, trả kết quả và lưu/lấy lịch sử.
+- **AI Service:** nạp pipeline/model, cung cấp dự đoán, health và model metadata.
+- **MongoDB:** lưu prediction history.
 
-## 4. Dữ liệu và mô hình
+Trong Docker, các service gọi nhau qua tên service (`backend`, `ai-service`, `mongodb`). Frontend không gọi trực tiếp AI Service. Các API không yêu cầu đăng nhập.
 
-Dataset được dùng là California Housing, gồm các đặc trưng chính như:
+## 7. Chạy trên máy (yêu cầu: Docker; lệnh: cp .env.example .env; docker compose up --build)
 
-- `longitude`, `latitude`
-- `housing_median_age`
-- `total_rooms`, `total_bedrooms`
-- `population`, `households`
-- `median_income`
-- `ocean_proximity`
-- `median_house_value` (biến mục tiêu)
-
-Mô hình được lưu ở:
-
-- `ai-models/models/model.joblib`
-- `ai-models/models/schema.json`
-- `ai-models/models/metadata.json`
-
-## 5. Cấu trúc thư mục dự án
-
-```text
-.
-├── .env.example
-├── docker-compose.yml
-├── README.md
-├── ai-models/
-│   ├── data/
-│   ├── models/
-│   ├── requirements.txt
-│   ├── service/
-│   └── colab/
-├── app/
-│   ├── backend/
-│   └── frontend/
-├── docs/
-└── .gitignore
-```
-
-## 6. Thiết lập môi trường
-
-Yêu cầu:
-
-- Docker + Docker Compose
-- Git
-- Python 3.12 (cho môi trường phát triển cục bộ)
-
-Tạo file biến môi trường từ mẫu:
+Yêu cầu: Git, Docker và Docker Compose.
 
 ```bash
+git clone https://github.com/MinhNguyen0106/cali-house-price-prediction.git
+cd cali-house-price-prediction
 cp .env.example .env
-```
-
-Các biến môi trường chính:
-
-```env
-AI_SERVICE_URL=http://ai-service:8001
-API_URL=http://localhost:8000
-FRONTEND_URL=http://localhost:3000
-MONGODB_URI=mongodb://mongodb:27017
-MONGODB_DATABASE=cali_house_db
-MONGODB_COLLECTION=predictions
-```
-
-## 7. Chạy dự án bằng Docker
-
-Từ thư mục gốc của dự án:
-
-```bash
 docker compose up --build
 ```
 
-Sau khi khởi động, các service sẽ có sẵn tại:
+Windows PowerShell, thay lệnh copy file bằng:
 
-- AI Service: http://localhost:8001
-- Backend: http://localhost:8000
-- Frontend: http://localhost:3000
-- MongoDB: mongodb://localhost:27017
-
-Kiểm tra sức khỏe từng service:
-
-```bash
-curl http://localhost:8001/health
-curl http://localhost:8000/health
-curl http://localhost:3000/health
+```powershell
+Copy-Item .env.example .env
 ```
 
-## 8. API contract
+Đợi các container khởi động, sau đó mở:
 
-### AI Service
+- Frontend: <http://localhost:3000>
+- Backend Swagger: <http://localhost:8000/docs>
+- AI Service Swagger: <http://localhost:8001/docs>
 
-- `GET /health`
-- `GET /model-info`
-- `POST /predict`
-
-Ví dụ request:
-
-```json
-{
-  "features": {
-    "longitude": -118.24,
-    "latitude": 34.05,
-    "housing_median_age": 30,
-    "total_rooms": 2400,
-    "total_bedrooms": 500,
-    "population": 1200,
-    "households": 400,
-    "median_income": 4.5,
-    "ocean_proximity": "NEAR BAY"
-  }
-}
-```
-
-Ví dụ response:
-
-```json
-{
-  "prediction": 432500.0,
-  "model_version": "1.0.0",
-  "request_id": "abc123",
-  "target_column": "median_house_value"
-}
-```
-
-### Backend
-
-- `GET /health`
-- `GET /model-info`
-- `GET /api/history`
-- `POST /api/predict`
-
-Dữ liệu đầu vào được validate theo `schema.json` trước khi forwarded tới AI Service.
-
-## 9. Luồng dự đoán và lưu lịch sử
-
-Luồng hoạt động như sau:
-
-1. Frontend hiển thị form nhập dữ liệu.
-2. Frontend gửi `POST /api/predict` tới backend.
-3. Backend validate dữ liệu theo `schema.json`.
-4. Backend gọi AI Service `POST /predict`.
-5. AI Service tính toán bằng model đã nạp sẵn khi khởi động.
-6. Backend lưu record vào MongoDB và trả kết quả cho frontend. 
-7. Mỗi request có `request_id` được log rõ ràng để dễ debug và bảo vệ demo.
-
-## 10. Public hệ thống qua một cổng ngrok
-
-Không cần public riêng Backend hoặc AI Service. Frontend có reverse proxy:
-
-```text
-Trình duyệt -> ngrok -> Frontend:3000 -> Backend:8000 -> AI Service:8001
-                                             └------> MongoDB
-```
-
-Giữ các giá trị sau trong `.env`:
-
-```env
-API_URL=/
-BACKEND_URL=http://backend:8000
-AI_SERVICE_URL=http://ai-service:8001
-```
-
-Khởi động hệ thống rồi tạo tunnel tới đúng cổng Frontend:
-
-```bash
-docker compose up --build -d
-ngrok http 3000
-```
-
-Mở URL HTTPS do ngrok cấp. Khi trình duyệt gọi `/api/predict`, request đi qua Frontend
-và được chuyển tiếp nội bộ tới Backend; Backend gọi AI Service qua Docker network.
-Vì vậy trình duyệt không cần truy cập trực tiếp các cổng `8000` hoặc `8001`.
-
-Nếu ngrok đổi link sau mỗi lần khởi động thì chỉ cần dùng link mới; không phải đổi
-`API_URL`, `BACKEND_URL` hoặc `AI_SERVICE_URL`.
-
-## 11. Dùng thử trên trình duyệt
-
-Mở URL:
-
-```text
-http://localhost:3000
-```
-
-Nhập các giá trị ví dụ rồi nhấn Predict. Hệ thống sẽ hiển thị giá ước lượng theo USD và log `request_id` trên console server.
-
-## 12. Kiểm tra và bảo trì
-
-Nên kiểm tra bằng các lệnh sau:
+Kiểm tra container và health:
 
 ```bash
 docker compose ps
-docker compose logs -f backend
-docker compose logs -f ai-service
-```
-
-Nếu cần xem lịch sử dự đoán:
-
-```bash
-curl http://localhost:8000/api/history
-```
-
-## 13. Nâng cấp và triển khai tiếp theo
-
-Có thể triển khai tiếp theo theo các cách:
-
-- Deploy backend + AI service trên Render hoặc máy chủ Linux.
-- Deploy frontend lên Vercel hoặc Nginx static hosting.
-- Dùng MongoDB Atlas cho database production.
-- Cập nhật tunnel/ngrok khi public ngoài internet.
-
-## 14. Checklist bảo vệ, đánh giá, kết luận và tài liệu tham khảo
-
-Trước khi nộp bài và bảo vệ, cần đảm bảo:
-
-- Mô hình đã được đóng gói hoàn chỉnh trong `ai-models/models/`.
-- `schema.json` khớp với dữ liệu đầu vào và pipeline model.
-- AI Service nạp model ngay khi container khởi động.
-- Backend validate dữ liệu và lưu lịch sử vào MongoDB.
-- Frontend hiển thị dữ liệu và kết quả trực quan.
-- Docker Compose chạy đúng với `docker compose up --build`.
-- `README.md` có các mục rõ ràng và link public cập nhật mới nhất.
-- Có demo 15 phút với 2 máy: Máy 1 để chiếu slide, Máy 2 để xem container/log và luồng request.
-
-Dự án này không chỉ tập trung vào độ chính xác của mô hình mà còn chú trọng tới khả năng triển khai thực tế, chuẩn hóa API, kiểm tra dữ liệu, log request, và vận hành qua Docker. Đây là mức độ sẵn sàng gần với một hệ thống AI product thực thụ, đúng với yêu cầu của bài tập lớn môn Học máy cơ bản.
-
-- California Housing dataset
-- scikit-learn documentation
-- FastAPI documentation
-- Docker documentation
-- MongoDB documentation
-
----
-
-## Project Structure
-
-```text
-cali-house-price-prediction-main/
-├── app/
-│   ├── frontend/
-│   │   ├── Dockerfile
-│   │   ├── main.py
-│   │   └── requirements.txt
-│   └── backend/
-│       ├── Dockerfile
-│       ├── main.py
-│       ├── requirements.txt
-│       └── tests/
-├── ai-models/
-│   ├── colab/
-│   │   ├── ML_Project.ipynb
-│   │   ├── 01_eda.ipynb
-│   │   ├── 02_preprocess.ipynb
-│   │   ├── 03_train.ipynb
-│   │   └── 04_evaluate.ipynb
-│   ├── data/
-│   │   ├── housing.csv.zip
-│   │   └── DATA.md
-│   ├── models/
-│   │   ├── model.joblib
-│   │   ├── schema.json
-│   │   └── metadata.json
-│   ├── service/
-│   │   ├── Dockerfile
-│   │   ├── main.py
-│   │   └── tests/
-│   ├── src/
-│   │   ├── preprocess.py
-│   │   ├── train.py
-│   │   └── evaluate.py
-│   └── requirements.txt
-├── docs/
-│   └── figures/
-├── docker-compose.yml
-├── .env.example
-├── .gitignore
-└── README.md
-```
-
-`docs/slide.pptx` và `docs/baocao.docx` chưa có trong repository hiện tại, nên project không tạo file giả cho hai tài liệu này.
-
-## Model
-
-- Loại bài toán: Regression
-- Target: `median_house_value`
-- Model artifact: `ai-models/models/model.joblib`
-- Model hiện tại: `GradientBoostingRegressor`
-- Pipeline artifact hiện tại gồm `preprocessor` + `model`
-- Raw input features: `longitude`, `latitude`, `housing_median_age`, `total_rooms`, `total_bedrooms`, `population`, `households`, `median_income`, `ocean_proximity`
-- Derived features dùng cho inference: `rooms_per_household`, `bedrooms_per_room`, `population_per_household`
-
-Metadata hiện tại ghi nhận:
-
-| Metric | Value |
-|---|---:|
-| Test RMSE | 46794.54 |
-| Test MAE | 30649.37 |
-| Test R² | 0.8329 |
-
-## Environment Variables
-
-Tạo file local từ mẫu nếu cần:
-
-```bash
-cp .env.example .env
-```
-
-Các biến chính:
-
-| Variable | Purpose |
-|---|---|
-| `AI_SERVICE_URL` | Backend gọi AI Service |
-| `AI_SERVICE_TIMEOUT_SECONDS` | Timeout khi Backend gọi AI Service |
-| `API_URL` | Frontend gọi Backend |
-| `MODEL_PATH` | Đường dẫn model trong AI Service container |
-| `MODEL_METADATA_PATH` | Đường dẫn metadata trong AI Service container |
-| `MODEL_SCHEMA_PATH` | Đường dẫn schema cho AI Service/Backend |
-| `MONGODB_URI` | MongoDB local hoặc MongoDB Atlas |
-| `MONGODB_DATABASE` | Tên database |
-| `MONGODB_COLLECTION` | Collection lưu prediction history |
-| `CORS_ORIGINS` | Danh sách origin cách nhau bằng dấu phẩy |
-| `BACKEND_URL` | URL Backend public cho smoke/load test |
-
-Không commit `.env`, token, password MongoDB Atlas, API key hoặc ngrok token.
-
-## Run With Docker
-
-```bash
-docker compose up --build
-```
-
-Local URLs:
-
-| Service | URL |
-|---|---|
-| Frontend | `http://localhost:3000` |
-| Backend | `http://localhost:8000` |
-| AI Service | `http://localhost:8001` |
-| MongoDB | `mongodb://localhost:27017` |
-
-## API
-
-AI Service:
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | Service status + model loaded |
-| GET | `/model-info` | Metadata thật từ `metadata.json` |
-| POST | `/predict` | Regression prediction |
-
-Backend:
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | Backend + MongoDB status |
-| GET | `/model-info` | Proxy metadata từ AI Service |
-| POST | `/api/predict` | Validate, forward AI Service, save history |
-| GET | `/api/history` | 10 prediction records gần nhất |
-
-Sample payload:
-
-```json
-{
-  "features": {
-    "longitude": -118.24,
-    "latitude": 34.05,
-    "housing_median_age": 30,
-    "total_rooms": 2400,
-    "total_bedrooms": 500,
-    "population": 1200,
-    "households": 400,
-    "median_income": 4.5,
-    "ocean_proximity": "NEAR BAY"
-  }
-}
-```
-
-## Health Checks
-
-```bash
-curl http://localhost:8001/health
-curl http://localhost:8000/health
 curl http://localhost:3000/health
+curl http://localhost:8000/health
+curl http://localhost:8001/health
 ```
 
-## Functional Tests
+Trên Windows có thể dùng `curl.exe`. Dừng các service bằng `docker compose down`; dữ liệu MongoDB được giữ trong volume. Chỉ dùng `docker compose down -v` nếu muốn xóa cả volume dữ liệu.
 
-AI Service:
+## 8. Huấn luyện lại model (link Colab, thứ tự chạy notebook)
+
+Notebook chạy theo thứ tự:
+
+1. `ai-models/colab/01_eda.ipynb` — khám phá dữ liệu.
+2. `ai-models/colab/02_preprocess.ipynb` — tiền xử lý và chia tập dữ liệu.
+3. `ai-models/colab/03_train.ipynb` — huấn luyện và so sánh các model.
+4. `ai-models/colab/04_evaluate.ipynb` — đánh giá, phân tích residual và lưu artifact.
+
+**Google Colab:** [Mở notebook Colab của dự án](https://colab.research.google.com/drive/1EI8srM9o6fLENsqM_NcGlXfgABVZdJYT?hl=vi).
+
+Các notebook tìm `ai-models/data/housing.csv.zip` và đọc CSV bên trong. Khi chạy trên Colab, cần đưa/clone repository vào runtime để notebook truy cập được dataset. Có thể huấn luyện bằng source Python thay cho notebook:
 
 ```bash
-python -m pytest ai-models/service/tests
+python -m pip install -r ai-models/requirements.txt
+python ai-models/src/evaluate.py
 ```
 
-Backend:
+Lệnh `evaluate.py` huấn luyện lại và cập nhật artifacts trong `ai-models/models/`; không cần chạy để dùng model hiện tại.
 
-```bash
-python -m pytest app/backend/tests
-```
+## 9. Biến môi trường (bảng từng biến, ý nghĩa)
 
-Backend tests mock AI Service and MongoDB, so they do not depend on Render or MongoDB Atlas.
+Giá trị mặc định dưới đây được lấy từ `.env.example`, `docker-compose.yml` và cấu hình service. Các URL nội bộ Docker cần dùng service name, không đổi thành `localhost` khi chạy trong container.
 
-## Deployment
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `AI_SERVICE_URL` | `http://ai-service:8001` | Backend gọi AI Service. |
+| `AI_SERVICE_TIMEOUT_SECONDS` | `30` | Thời gian chờ Backend gọi AI Service. |
+| `BACKEND_URL` | `http://backend:8000` | Frontend proxy gọi Backend. |
+| `BACKEND_TIMEOUT_SECONDS` | `30` | Thời gian chờ Frontend gọi Backend. |
+| `API_URL` | `/` | Base URL API của trình duyệt; `/` dùng cùng host Frontend. |
+| `FRONTEND_PORT` | `3000` | Cổng Frontend publish ra máy host. |
+| `BACKEND_PORT` | `8000` | Cổng Backend publish ra máy host. |
+| `AI_SERVICE_PORT` | `8001` | Cổng AI Service publish ra máy host. |
+| `MODEL_PATH` | `/app/models/model.joblib` | Đường dẫn model trong container AI. |
+| `MODEL_METADATA_PATH` | `/app/models/metadata.json` | Đường dẫn metadata trong container AI. |
+| `MODEL_SCHEMA_PATH` | `/app/models/schema.json` | Đường dẫn schema trong container. |
+| `MONGODB_URI` | `mongodb://mongodb:27017` | URI kết nối MongoDB từ Backend. |
+| `MONGODB_DATABASE` | `cali_house_db` | Database lưu prediction history. |
+| `MONGODB_COLLECTION` | `predictions` | Collection lưu prediction history. |
+| `CORS_ORIGINS` | `localhost` và `127.0.0.1`, ports 3000/8000 | Danh sách origin được phép, phân tách bằng dấu phẩy. |
+| `PORT` | Được Compose đặt lần lượt là `3000`, `8000`, `8001` | Cổng Uvicorn trong từng container; thông thường không cần khai báo thủ công trong `.env`. |
 
-### A. AI Service to Render
+`MODEL_SCHEMA_PATH` được Compose cấu hình cho cả AI Service và Backend. AI Service cũng dùng `MODEL_PATH` và `MODEL_METADATA_PATH`. Public URL ngrok không phải URL nội bộ giữa các container; khi dùng `API_URL=/`, URL tunnel đổi không yêu cầu thay `BACKEND_URL` hay `AI_SERVICE_URL`.
 
-- Service type: Web Service
-- Runtime: Docker
-- Root Directory: `ai-models`
-- Dockerfile Path: `service/Dockerfile`
-- Health Check Path: `/health`
-- Port behavior: Docker command binds to `${PORT:-8001}`; Render provides `PORT`
-- Environment Variables:
-  - `MODEL_PATH=/app/models/model.joblib`
-  - `MODEL_METADATA_PATH=/app/models/metadata.json`
-  - `MODEL_SCHEMA_PATH=/app/models/schema.json`
-  - `CORS_ORIGINS=<backend-url>,<frontend-url>`
+## 10. Triển khai (cách public: deploy/tunnel, các bước, cách cập nhật khi đổi link)
 
-After deploy, test:
+Hiện ứng dụng được public bằng ngrok tunnel tới Frontend local trên cổng `3000`; đây là cách public tạm thời, không phải hosting luôn sẵn sàng.
 
-```bash
-curl https://<ai-service>.onrender.com/health
-curl https://<ai-service>.onrender.com/model-info
-```
+1. Tạo `.env` và khởi động stack: `docker compose up --build -d`.
+2. Kiểm tra `docker compose ps` và mở `http://localhost:3000/health`.
+3. Mở một terminal khác và chạy:
 
-### B. Backend to Render
+   ```bash
+   ngrok http 3000
+   ```
 
-- Service type: Web Service
-- Runtime: Docker
-- Root Directory: repository root
-- Dockerfile Path: `app/backend/Dockerfile`
-- Health Check Path: `/health`
-- Port behavior: Docker command binds to `${PORT:-8000}`; Render provides `PORT`
-- Environment Variables:
-  - `AI_SERVICE_URL=https://<ai-service>.onrender.com`
-  - `AI_SERVICE_TIMEOUT_SECONDS=30`
-  - `MODEL_SCHEMA_PATH=/app/ai-models/models/schema.json`
-  - `MONGODB_URI=<MongoDB Atlas connection string or local equivalent>`
-  - `MONGODB_DATABASE=cali_house_db`
-  - `MONGODB_COLLECTION=predictions`
-  - `CORS_ORIGINS=<frontend-url>`
+4. Lấy HTTPS Forwarding URL do ngrok hiển thị. Không dùng URL ví dụ hoặc URL cũ nếu ngrok đã cấp domain khác.
+5. Kiểm tra URL public bằng `/health`, sau đó thực hiện dự đoán qua `/api/predict` và kiểm tra `/api/history`.
+6. Khi URL thay đổi, cập nhật địa chỉ App ở mục 11 và ghi nhận URL cũ/mới, thời điểm ghi nhận ở mục 12. Nếu dùng `API_URL=/`, Frontend gọi API tương đối cùng host; không đưa URL tunnel vào `BACKEND_URL` hoặc `AI_SERVICE_URL`.
 
-### C. Frontend Deployment
+Tunnel chỉ truy cập được khi máy host, Docker containers và tiến trình ngrok đang chạy. URL miễn phí có thể thay đổi sau khi khởi động lại ngrok. Để public riêng Backend hoặc AI Service cần cấu hình tunnel/deployment tương ứng; tunnel hiện tại chỉ forward tới Frontend.
 
-Frontend hiện tại là Python FastAPI app trả HTML, không phải Next.js/React static app. Cách deploy phù hợp nhất cho bản hiện tại:
+## 11. Demo online (địa chỉ App, địa chỉ AI Service/docs — cập nhật mỗi khi đổi)
 
-- Render Web Service
-- Runtime: Docker
-- Root Directory: `app/frontend`
-- Dockerfile Path: `Dockerfile`
-- Health Check Path: `/health`
-- Environment Variables:
-  - `API_URL=https://<backend>.onrender.com`
-  - `CORS_ORIGINS=https://<backend>.onrender.com`
+- **App / Frontend:** <https://applicant-underrate-psychic.ngrok-free.dev>
+- **Backend API:** được gọi qua Frontend proxy tại `https://applicant-underrate-psychic.ngrok-free.dev/api/...`; chưa có URL public riêng được xác nhận.
+- **AI Service API / Swagger:** chưa được public riêng qua ngrok hiện tại. Khi chạy local, Swagger ở <http://localhost:8001/docs> và API ở <http://localhost:8001>.
+- **Kết quả kiểm tra ngày 02/10/2026:** public `/health` trả HTTP 200; public `/api/predict` trả prediction thành công với model version `2.0.0`.
 
-Vercel chỉ nên dùng nếu bạn chuyển frontend sang static/Next.js hoặc tái cấu trúc FastAPI theo Python Functions của Vercel. Không dùng URL Vercel giả trong báo cáo.
+URL ngrok là địa chỉ tại lần kiểm tra nêu trên; cần kiểm tra lại khi sử dụng vì tunnel có thể đổi hoặc ngừng khi máy host tắt.
 
-### D. MongoDB Atlas
+## 12. Nhật ký đổi cổng/tunnel (thời điểm đổi, địa chỉ cũ → mới)
 
-1. Tạo cluster MongoDB Atlas.
-2. Tạo database user.
-3. Allowlist IP phù hợp hoặc dùng `0.0.0.0/0` cho demo ngắn hạn.
-4. Copy connection string vào `MONGODB_URI` trên Render Backend.
-5. Không commit password vào repository.
+Repository chưa có dữ liệu xác nhận thời điểm tạo/đổi URL trước đây. Không suy ra ngày đổi tunnel từ ngày kiểm tra.
 
-### E. ngrok Fallback for AI Service
+| Thời điểm | Địa chỉ cũ | Địa chỉ mới | Ghi chú |
+|---|---|---|---|
+| Chưa được ghi nhận | Không có dữ liệu | `https://applicant-underrate-psychic.ngrok-free.dev` | URL đã kiểm tra hoạt động ngày 02/10/2026; đây là mốc kiểm thử, không khẳng định ngày đổi URL. |
 
-Nếu chưa deploy AI Service lên Render:
+Khi ngrok cấp URL mới, thay địa chỉ hiện hành tại mục 11 và cập nhật thêm một dòng với thời điểm đổi thực tế.
 
-```bash
-docker compose up --build ai-service
-ngrok http 8001
-```
+## 13. Kết quả kiểm thử hiệu năng
 
-Sau đó set Backend env:
+Chưa có API load test được ghi nhận trong repository. Vì vậy, throughput, latency trung bình/percentile và error rate dưới tải **chưa được đo**; không dùng thời gian inference trong notebook làm benchmark API.
 
-```env
-AI_SERVICE_URL=https://<ngrok-domain>.ngrok-free.app
-```
+## 14. Hạn chế và hướng phát triển
 
-## Demo Online
+**Hạn chế hiện tại**
 
-| Service | URL |
-|---|---|
-| Frontend | TBD |
-| Backend | TBD |
-| AI Service | TBD |
+- `median_house_value` trong dataset bị giới hạn ở mức 500.000 USD; kết quả ở vùng giá cao cần được diễn giải thận trọng.
+- Ngrok phụ thuộc máy cá nhân và không bảo đảm URL cố định hoặc dịch vụ hoạt động liên tục.
+- Chưa có load test API để đánh giá khả năng chịu tải.
+- API chưa có authentication/authorization.
+- Prediction history phụ thuộc MongoDB. Nếu lưu history lỗi, Backend có thể vẫn trả prediction thành công và ghi lỗi vào log.
+- Metric notebook và metric artifact phản ánh các lần huấn luyện khác nhau; dùng `metadata.json` làm nguồn metric cho model đang chạy.
 
-## Tunnel / Port Change Log
+**Hướng phát triển**
 
-| Time | Service | Old URL | New URL | Reason |
-|---|---|---|---|---|
-| TBD | TBD | TBD | TBD | TBD |
-
-## Deployment References
-
-- Render Docker/Web Service docs: https://render.com/docs/docker
-- Render Health Checks docs: https://render.com/docs/health-checks
-- Vercel Python Runtime docs: https://vercel.com/docs/functions/runtimes/python
+- Thêm benchmark có thể chạy lại, ghi nhận số request, throughput, latency và error rate.
+- Chuyển sang hosting ổn định hơn nếu cần demo liên tục; cập nhật URL và nhật ký triển khai.
+- Cân nhắc authentication/authorization nếu đưa ứng dụng ra sử dụng rộng hơn.
+- Đồng bộ báo cáo/slide với metadata của artifact được phát hành.

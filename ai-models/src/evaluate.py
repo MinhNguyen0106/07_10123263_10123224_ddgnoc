@@ -1,73 +1,62 @@
-from __future__ import annotations
-
-import time
-from typing import Any
-
+import os
+import json
+import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from datetime import datetime
+import sklearn
+from preprocess import DATA_PATH, generate_schema, load_dataset
+from train import MODEL_VERSION
 
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(PROJECT_DIR, "models")
 
-def rmse(y_true, y_pred) -> float:
-    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
+def evaluate_and_generate_artifacts(best_model, X_train, X_test, y_train, y_test, cv_rmse, best_params):
+    # 1. Đánh giá một lần duy nhất trên tập kiểm thử chưa từng thấy
+    y_pred = best_model.predict(X_test)
+    test_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    test_mae = mean_absolute_error(y_test, y_pred)
+    test_r2 = r2_score(y_test, y_pred)
 
+    print("--- ĐÁNH GIÁ MÔ HÌNH TRÊN TẬP HOÀN TOÀN ĐỘC LẬP (TEST SET) ---")
+    print(f"Test RMSE: {test_rmse:.2f} USD")
+    print(f"Test MAE: {test_mae:.2f} USD")
+    print(f"Test R2 Score: {test_r2:.4f}")
 
-def mae(y_true, y_pred) -> float:
-    return float(mean_absolute_error(y_true, y_pred))
+    # 2. Tạo schema.json từ cùng generator được dùng trong các kiểm thử.
+    schema = generate_schema(load_dataset(DATA_PATH))
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    with open(os.path.join(MODELS_DIR, 'schema.json'), 'w', encoding='utf-8') as f:
+        json.dump(schema, f, indent=4, ensure_ascii=False)
+    print("✔ Đã tạo tệp models/schema.json")
 
-
-def r2(y_true, y_pred) -> float:
-    return float(r2_score(y_true, y_pred))
-
-
-def evaluate_regression(y_true, y_pred) -> dict[str, float]:
-    return {
-        "rmse": rmse(y_true, y_pred),
-        "mae": mae(y_true, y_pred),
-        "r2": r2(y_true, y_pred),
-    }
-
-
-def evaluate_model(
-    model_name: str,
-    model_obj: Any,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    best_params: dict[str, Any] | None = None,
-    cv_rmse: float | None = None,
-) -> dict[str, Any]:
-    start_train = time.time()
-    model_obj.fit(X_train, y_train)
-    train_time = time.time() - start_train
-
-    start_predict = time.time()
-    y_pred = model_obj.predict(X_test)
-    predict_time = time.time() - start_predict
-
-    metrics = evaluate_regression(y_test, y_pred)
-    return {
-        "Model": model_name,
-        "Best Hyperparameters": best_params or "N/A",
-        "CV RMSE": round(cv_rmse, 4) if cv_rmse is not None else "N/A",
-        "Test RMSE": round(metrics["rmse"], 4),
-        "Test MAE": round(metrics["mae"], 4),
-        "Test R2": round(metrics["r2"], 4),
-        "Train Time (s)": round(train_time, 4),
-        "Predict Time (s)": round(predict_time, 4),
-    }
-
-
-def compare_results(results: list[dict[str, Any]]) -> pd.DataFrame:
-    return pd.DataFrame(results).sort_values("Test RMSE").reset_index(drop=True)
-
-
-def residual_frame(y_true, y_pred) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "y_true": y_true,
-            "y_pred": y_pred,
-            "residual": np.asarray(y_true) - np.asarray(y_pred),
+    # 3. Tạo metadata.json
+    metadata = {
+        "model_name": "California Housing Price Regressor",
+        "model_version": MODEL_VERSION,
+        "target_column": "median_house_value",
+        "training_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "best_hyperparameters": {k.replace('regressor__', ''): v for k, v in best_params.items()},
+        "metrics": {
+            "train_cv_rmse": float(cv_rmse),
+            "test_rmse": float(test_rmse),
+            "test_mae": float(test_mae),
+            "test_r2": float(test_r2)
+        },
+        "environment": {
+            "scikit-learn": sklearn.__version__,
+            "pandas": pd.__version__,
+            "numpy": np.__version__,
+            "joblib": joblib.__version__
         }
-    )
+    }
+    with open(os.path.join(MODELS_DIR, 'metadata.json'), 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=4, ensure_ascii=False)
+    print("✔ Đã tạo tệp models/metadata.json")
+
+if __name__ == '__main__':
+    # Chạy quy trình liên hoàn
+    from train import train_project_model
+    best_model, X_train, X_test, y_train, y_test, cv_rmse, best_params = train_project_model(DATA_PATH)
+    evaluate_and_generate_artifacts(best_model, X_train, X_test, y_train, y_test, cv_rmse, best_params)

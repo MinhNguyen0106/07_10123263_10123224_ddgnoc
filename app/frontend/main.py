@@ -62,7 +62,7 @@ async def request_logger(request: Request, call_next):
     logger.info("frontend req=%s status=%s total_duration_ms=%s", request_id, response.status_code, elapsed_ms)
     return response
 
-HTML_PAGE = f"""
+HTML_PAGE = rf"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,37 +87,32 @@ HTML_PAGE = f"""
         <h1>Dự đoán giá nhà California</h1>
         <p>Nhập thông tin bất động sản để ước tính giá trị trung bình của căn nhà.</p>
         <form id="prediction-form">
-            <div class="two-col">
-                <div class="field"><label for="longitude">Kinh độ</label><input id="longitude" name="longitude" type="number" step="0.01" placeholder="-118.24" required /></div>
-                <div class="field"><label for="latitude">Vĩ độ</label><input id="latitude" name="latitude" type="number" step="0.01" placeholder="34.05" required /></div>
-                <div class="field"><label for="housing_median_age">Tuổi trung bình nhà</label><input id="housing_median_age" name="housing_median_age" type="number" step="0.1" placeholder="30" required /></div>
-                <div class="field"><label for="total_rooms">Tổng phòng</label><input id="total_rooms" name="total_rooms" type="number" step="1" placeholder="2400" required /></div>
-                <div class="field"><label for="total_bedrooms">Tổng phòng ngủ</label><input id="total_bedrooms" name="total_bedrooms" type="number" step="1" placeholder="500" required /></div>
-                <div class="field"><label for="population">Dân số</label><input id="population" name="population" type="number" step="1" placeholder="1200" required /></div>
-                <div class="field"><label for="households">Số hộ gia đình</label><input id="households" name="households" type="number" step="1" placeholder="400" required /></div>
-                <div class="field"><label for="median_income">Thu nhập trung bình</label><input id="median_income" name="median_income" type="number" step="0.01" placeholder="4.5" required /></div>
-                <div class="field" style="grid-column: 1 / -1;"><label for="ocean_proximity">Vị trí gần biển</label>
-                    <select id="ocean_proximity" name="ocean_proximity" required>
-                        <option value="" selected disabled>Chọn một tùy chọn</option>
-                        <option value="<1H OCEAN"><1H OCEAN</option>
-                        <option value="INLAND">INLAND</option>
-                        <option value="ISLAND">ISLAND</option>
-                        <option value="NEAR BAY">NEAR BAY</option>
-                        <option value="NEAR OCEAN">NEAR OCEAN</option>
-                    </select>
-                </div>
-            </div>
-            <button type="submit">Dự đoán</button>
+            <div class="two-col" id="feature-fields"></div>
+            <button id="submit-button" type="submit" disabled>Dự đoán</button>
         </form>
-        <div class="status" id="status">Trạng thái: chờ</div>
+        <div class="status" id="status">Trạng thái: đang tải schema...</div>
         <div class="result" id="result" style="display:none;"></div>
     </div>
 
     <script>
-        const apiBase = "{os.getenv("API_URL", "http://localhost:8000")}".replace(/\/+$/, "");
+        const apiBase = "{os.getenv("API_URL", "/")}".replace(/\/+$/, "");
         const form = document.getElementById('prediction-form');
+        const fieldsContainer = document.getElementById('feature-fields');
+        const submitButton = document.getElementById('submit-button');
         const resultBox = document.getElementById('result');
         const statusBox = document.getElementById('status');
+        let featureSpecs = {{}};
+        const featureLabels = {{
+            longitude: 'Kinh độ',
+            latitude: 'Vĩ độ',
+            housing_median_age: 'Tuổi trung bình nhà',
+            total_rooms: 'Tổng phòng',
+            total_bedrooms: 'Tổng phòng ngủ',
+            population: 'Dân số',
+            households: 'Số hộ gia đình',
+            median_income: 'Thu nhập trung bình',
+            ocean_proximity: 'Vị trí gần biển'
+        }};
 
         const getApiErrorMessage = (data) => {{
             if (!data) return 'Dự đoán thất bại';
@@ -138,30 +133,86 @@ HTML_PAGE = f"""
             return 'Dự đoán thất bại';
         }};
 
+        const makeField = (name, spec) => {{
+            const wrapper = document.createElement('div');
+            wrapper.className = 'field';
+            if (spec.allowed_values) wrapper.style.gridColumn = '1 / -1';
+
+            const id = `feature-${{name}}`;
+            const label = document.createElement('label');
+            label.htmlFor = id;
+            label.textContent = featureLabels[name] || name;
+            wrapper.appendChild(label);
+
+            let input;
+            if (spec.allowed_values) {{
+                input = document.createElement('select');
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Chọn một tùy chọn';
+                placeholder.disabled = !spec.nullable;
+                placeholder.selected = true;
+                input.appendChild(placeholder);
+                for (const value of spec.allowed_values) {{
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    input.appendChild(option);
+                }}
+            }} else {{
+                input = document.createElement('input');
+                input.type = 'number';
+                input.step = 'any';
+                const limits = spec.range;
+                const minimum = spec.min ?? (limits ? limits[0] : null);
+                const maximum = spec.max ?? (limits ? limits[1] : null);
+                if (minimum !== null && minimum !== undefined) input.min = minimum;
+                if (maximum !== null && maximum !== undefined) input.max = maximum;
+            }}
+
+            input.id = id;
+            input.name = name;
+            input.required = !spec.nullable;
+            wrapper.appendChild(input);
+            return wrapper;
+        }};
+
+        const loadSchema = async () => {{
+            const response = await fetch(`${{apiBase}}/api/schema`);
+            const data = await response.json().catch(() => ({{}}));
+            if (!response.ok) throw new Error(getApiErrorMessage(data));
+            if (!data.input_features || typeof data.input_features !== 'object') {{
+                throw new Error('Backend trả về schema không hợp lệ.');
+            }}
+            featureSpecs = data.input_features;
+            fieldsContainer.replaceChildren(
+                ...Object.entries(featureSpecs).map(([name, spec]) => makeField(name, spec))
+            );
+            submitButton.disabled = false;
+            statusBox.textContent = 'Trạng thái: sẵn sàng';
+        }};
+
         form.addEventListener('submit', async (event) => {{
             event.preventDefault();
             if (!form.reportValidity()) return;
 
-            const numberFields = ['longitude', 'latitude', 'housing_median_age', 'total_rooms',
-                'total_bedrooms', 'population', 'households', 'median_income'];
-            if (numberFields.some((id) => !Number.isFinite(Number(document.getElementById(id).value)))) {{
-                statusBox.textContent = 'Trạng thái: vui lòng nhập đủ các giá trị số';
-                return;
-            }}
-
-            const payload = {{
-                features: {{
-                    longitude: Number(document.getElementById('longitude').value),
-                    latitude: Number(document.getElementById('latitude').value),
-                    housing_median_age: Number(document.getElementById('housing_median_age').value),
-                    total_rooms: Number(document.getElementById('total_rooms').value),
-                    total_bedrooms: Number(document.getElementById('total_bedrooms').value),
-                    population: Number(document.getElementById('population').value),
-                    households: Number(document.getElementById('households').value),
-                    median_income: Number(document.getElementById('median_income').value),
-                    ocean_proximity: document.getElementById('ocean_proximity').value,
+            const features = {{}};
+            for (const [name, spec] of Object.entries(featureSpecs)) {{
+                const value = form.elements.namedItem(name).value;
+                if (value === '' && spec.nullable) {{
+                    features[name] = null;
+                }} else if (spec.allowed_values) {{
+                    features[name] = value;
+                }} else {{
+                    const numericValue = Number(value);
+                    if (!Number.isFinite(numericValue)) {{
+                        statusBox.textContent = `Trạng thái: giá trị ${{name}} phải là số hợp lệ`;
+                        return;
+                    }}
+                    features[name] = numericValue;
                 }}
-            }};
+            }}
+            const payload = {{ features }};
 
             statusBox.textContent = 'Trạng thái: đang gửi yêu cầu...';
             try {{
@@ -185,10 +236,14 @@ HTML_PAGE = f"""
                 resultBox.style.display = 'block';
                 statusBox.textContent = 'Trạng thái: thành công';
             }} catch (error) {{
-                resultBox.innerHTML = `<strong>Lỗi:</strong> ${{error.message}}`;
+                resultBox.textContent = `Lỗi: ${{error.message}}`;
                 resultBox.style.display = 'block';
                 statusBox.textContent = 'Trạng thái: thất bại';
             }}
+        }});
+
+        loadSchema().catch((error) => {{
+            statusBox.textContent = `Không tải được schema: ${{error.message}}`;
         }});
     </script>
 </body>
