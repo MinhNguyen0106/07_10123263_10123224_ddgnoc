@@ -192,18 +192,18 @@ Hiện ứng dụng được public bằng ngrok tunnel tới Frontend local tr�
 
 4. Lấy HTTPS Forwarding URL do ngrok hiển thị. Không dùng URL ví dụ hoặc URL cũ nếu ngrok đã cấp domain khác.
 5. Kiểm tra URL public bằng `/health`, sau đó thực hiện dự đoán qua `/api/predict` và kiểm tra `/api/history`.
-6. Khi URL thay đổi, cập nhật địa chỉ App ở mục 11 và ghi nhận URL cũ/mới, thời điểm ghi nhận ở mục 12. Nếu dùng `API_URL=/`, Frontend gọi API tương đối cùng host; không đưa URL tunnel vào `BACKEND_URL` hoặc `AI_SERVICE_URL`.
+6. Mỗi thứ Hai, kiểm tra URL HTTPS hiện hành và endpoint `/health`; cập nhật địa chỉ App ở mục 11 và ghi nhận kết quả kiểm tra ở mục 12 nếu cần. Nếu URL thực sự đổi, cập nhật URL cũ/mới. Nếu dùng `API_URL=/`, Frontend gọi API tương đối cùng host; không đưa URL tunnel vào `BACKEND_URL` hoặc `AI_SERVICE_URL`.
 
-Tunnel chỉ truy cập được khi máy host, Docker containers và tiến trình ngrok đang chạy. URL miễn phí có thể thay đổi sau khi khởi động lại ngrok. Để public riêng Backend hoặc AI Service cần cấu hình tunnel/deployment tương ứng; tunnel hiện tại chỉ forward tới Frontend.
+Tunnel chỉ truy cập được khi máy host, Docker containers và tiến trình ngrok đang chạy. Domain Dev miễn phí được gán tự động cho tài khoản là hostname ổn định; khi dừng ngrok, URL vẫn là địa chỉ đó nhưng không truy cập được cho đến khi khởi động tunnel lại. Tham khảo [tài liệu Domains của ngrok](https://ngrok.com/docs/gateway/domains/). Để public riêng Backend hoặc AI Service cần cấu hình tunnel/deployment tương ứng; tunnel hiện tại chỉ forward tới Frontend.
 
-## 11. Demo online (địa chỉ App, địa chỉ AI Service/docs — cập nhật mỗi khi đổi)
+## 11. Demo online (địa chỉ App, địa chỉ AI Service/docs — kiểm tra vào mỗi thứ Hai)
 
 - **App / Frontend:** <https://applicant-underrate-psychic.ngrok-free.dev>
 - **Backend API:** được gọi qua Frontend proxy tại `https://applicant-underrate-psychic.ngrok-free.dev/api/...`; chưa có URL public riêng được xác nhận.
 - **AI Service API / Swagger:** chưa được public riêng qua ngrok hiện tại. Khi chạy local, Swagger ở <http://localhost:8001/docs> và API ở <http://localhost:8001>.
 - **Kết quả kiểm tra ngày 02/10/2026:** public `/health` trả HTTP 200; public `/api/predict` trả prediction thành công với model version `2.0.0`.
 
-URL ngrok là địa chỉ tại lần kiểm tra nêu trên; cần kiểm tra lại khi sử dụng vì tunnel có thể đổi hoặc ngừng khi máy host tắt.
+URL trên là địa chỉ đã ghi nhận tại lần kiểm tra ngày 02/10/2026. Domain Dev của tài khoản thường giữ nguyên qua các lần khởi động lại, nhưng tunnel chỉ hoạt động khi máy host và tiến trình ngrok đang chạy. Nhóm kiểm tra URL và `/health` vào mỗi thứ Hai (hoặc sớm hơn nếu có thay đổi).
 
 ## 12. Nhật ký đổi cổng/tunnel (thời điểm đổi, địa chỉ cũ → mới)
 
@@ -213,7 +213,7 @@ Repository chưa có dữ liệu xác nhận thời điểm tạo/đổi URL tr�
 |---|---|---|---|
 | Chưa được ghi nhận | Không có dữ liệu | `https://applicant-underrate-psychic.ngrok-free.dev` | URL đã kiểm tra hoạt động ngày 02/10/2026; đây là mốc kiểm thử, không khẳng định ngày đổi URL. |
 
-Khi ngrok cấp URL mới, thay địa chỉ hiện hành tại mục 11 và cập nhật thêm một dòng với thời điểm đổi thực tế.
+Mỗi thứ Hai, kiểm tra URL hiện hành và `/health`. Nếu URL không đổi, không cần thay địa chỉ tại mục 11; có thể ghi nhận lần kiểm tra. Nếu URL thực sự đổi, cập nhật mục 11 và thêm một dòng ghi ngày cùng URL cũ → mới.
 
 ## 13. Kết quả kiểm thử hiệu năng
 
