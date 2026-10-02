@@ -9,6 +9,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -37,6 +38,45 @@ ENGINEERED_FEATURES = [
 REQUIRED_RAW_FEATURES = RAW_NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 MODEL_FEATURE_NAMES = RAW_NUMERICAL_FEATURES + CATEGORICAL_FEATURES + ENGINEERED_FEATURES
 MODEL_NUMERICAL_FEATURES = RAW_NUMERICAL_FEATURES + ENGINEERED_FEATURES
+
+
+class HousingFeatureEngineer(BaseEstimator, TransformerMixin):
+    """Create the ratio features expected by the serialized housing pipeline."""
+
+    def fit(self, X: pd.DataFrame, y: Any = None) -> HousingFeatureEngineer:
+        return self
+
+    def transform(self, X: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
+        if isinstance(X, pd.DataFrame):
+            X_copy = X.copy()
+            X_copy["rooms_per_household"] = (
+                X_copy["total_rooms"] / X_copy["households"].replace(0, 1)
+            )
+            X_copy["bedrooms_per_room"] = (
+                X_copy["total_bedrooms"] / X_copy["total_rooms"].replace(0, 1)
+            )
+            X_copy["population_per_household"] = (
+                X_copy["population"] / X_copy["households"].replace(0, 1)
+            )
+            return X_copy
+
+        values = np.asarray(X)
+        if values.ndim != 2 or values.shape[1] != len(RAW_NUMERICAL_FEATURES):
+            raise ValueError(
+                "HousingFeatureEngineer expects the eight raw numerical features "
+                "in RAW_NUMERICAL_FEATURES order."
+            )
+
+        households = np.where(values[:, 6] == 0, 1, values[:, 6])
+        total_rooms = np.where(values[:, 3] == 0, 1, values[:, 3])
+        engineered = np.column_stack(
+            (
+                values[:, 3] / households,
+                values[:, 4] / total_rooms,
+                values[:, 5] / households,
+            )
+        )
+        return np.column_stack((values, engineered))
 
 
 def load_dataset(path: str | Path = DATA_PATH) -> pd.DataFrame:
@@ -103,6 +143,30 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
+def get_raw_input_preprocessor() -> ColumnTransformer:
+    """Build preprocessing for the raw 9-column inference input."""
+    numerical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("engineer", HousingFeatureEngineer()),
+            ("scaler", StandardScaler()),
+        ]
+    )
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]
+    )
+    return ColumnTransformer(
+        transformers=[
+            ("num", numerical_transformer, RAW_NUMERICAL_FEATURES),
+            ("cat", categorical_transformer, CATEGORICAL_FEATURES),
+        ],
+        remainder="drop",
+    )
+
+
 def prepare_training_data(df: pd.DataFrame):
     X_train, X_test, y_train, y_test = split_features_target(df)
     X_train_fe, X_test_fe, imputer = prepare_feature_frames(X_train, X_test)
@@ -125,31 +189,33 @@ def prepare_training_data(df: pd.DataFrame):
 
 def build_feature_schema(df: pd.DataFrame) -> dict[str, Any]:
     feature_schema: dict[str, Any] = {}
-    for column in REQUIRED_RAW_FEATURES + ENGINEERED_FEATURES:
+    for column in REQUIRED_RAW_FEATURES:
         if column in CATEGORICAL_FEATURES:
             feature_schema[column] = {
-                "type": "string",
+                "type": "object",
+                "nullable": bool(df[column].isna().any()),
                 "allowed_values": sorted(df[column].dropna().astype(str).unique().tolist()),
-                "description": f"{column} input feature.",
             }
             continue
 
         values = df[column].dropna()
         feature_schema[column] = {
-            "type": "number",
-            "min": float(values.min()) if not values.empty else None,
-            "max": float(values.max()) if not values.empty else None,
-            "description": f"{column} input feature.",
+            "type": str(df[column].dtype),
+            "nullable": bool(df[column].isna().any()),
+            "range": [
+                float(values.min()) if not values.empty else None,
+                float(values.max()) if not values.empty else None,
+            ],
         }
     return feature_schema
 
 
 def generate_schema(df: pd.DataFrame) -> dict[str, Any]:
-    feature_df = add_engineered_features(df.drop(columns=[TARGET_COLUMN]).copy())
+    feature_df = df.drop(columns=[TARGET_COLUMN], errors="ignore").copy()
+    missing_features = set(REQUIRED_RAW_FEATURES) - set(feature_df.columns)
+    if missing_features:
+        raise ValueError(f"Cannot generate schema; missing features: {sorted(missing_features)}")
     return {
-        "dataset_name": "California Housing",
         "target_column": TARGET_COLUMN,
-        "required_raw_features": REQUIRED_RAW_FEATURES,
-        "model_feature_names": MODEL_FEATURE_NAMES,
-        "feature_schema": build_feature_schema(feature_df),
+        "input_features": build_feature_schema(feature_df),
     }

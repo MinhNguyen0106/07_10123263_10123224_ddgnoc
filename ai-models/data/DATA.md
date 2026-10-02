@@ -1,21 +1,7 @@
-Tên dataset:
-California Housing
+# Dataset
 
-Nguồn:
-Kaggle
-
-Mục tiêu:
-Dự đoán median_house_value
-
-Loại bài toán:
-Regression
-
-Target:
-median_house_value
-
-Các feature:
-longitude
-latitude
-housing_median_age
-...
-ocean_proximity
+- **Tên dataset:** California Housing
+- **Nguồn:** Kaggle
+- **URL nguồn:** https://www.kaggle.com/datasets/camnugent/california-housing-prices
+- **Giấy phép:** CC0: Public Domain
+- **URL giấy phép:** https://creativecommons.org/publicdomain/zero/1.0/

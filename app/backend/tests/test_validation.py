@@ -33,3 +33,14 @@ def test_ai_service_timeout_returns_504(client, backend_module, monkeypatch):
 
     assert response.status_code == 504
     assert response.json()["detail"]["error"] == "ai_service_timeout"
+
+
+def test_input_schema_exposes_only_raw_features(client):
+    response = client.get("/api/schema")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["target_column"] == "median_house_value"
+    assert list(data["input_features"]) == list(VALID_FEATURES)
+    assert data["input_features"]["total_bedrooms"]["nullable"] is True
+    assert data["input_features"]["ocean_proximity"]["allowed_values"]

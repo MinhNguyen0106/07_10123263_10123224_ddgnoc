@@ -5,6 +5,7 @@
 !/.env.example
 __pycache__/
 *.py[cod]
+ai-models/colab/split_notebook.py
 .pytest_cache/
 .venv/
 venv/

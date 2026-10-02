@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -73,27 +74,60 @@ def validate_features(payload: Any) -> Dict[str, Any]:
         raise ValueError("Request body must include a JSON object under 'features'.")
 
     feature_schema = schema.get("feature_schema", {})
+    input_specs = schema.get("input_features")
+    if isinstance(input_specs, dict):
+        feature_specs = input_specs
+        required_fields = [
+            field for field, spec in feature_specs.items()
+            if not spec.get("nullable", False)
+        ]
+    else:
+        feature_specs = {
+            name: spec
+            for name, spec in feature_schema.items()
+            if name in schema.get("required_raw_features", feature_schema.keys())
+        }
+        required_fields = schema.get("required_raw_features", list(feature_specs))
+
     normalized: Dict[str, Any] = {}
-    for key, spec in feature_schema.items():
+    for key, spec in feature_specs.items():
+        nullable = bool(spec.get("nullable", False))
         if key not in payload:
-            continue
+            if nullable:
+                normalized[key] = None
+                continue
+            raise ValueError(f"Missing required field: {key}.")
         value = payload[key]
+        if value is None or value == "":
+            if nullable:
+                normalized[key] = None
+                continue
+            raise ValueError(f"Field '{key}' is required.")
+
         field_type = spec.get("type")
-        if field_type == "number":
+        if field_type in {"number", "integer", "float64", "int64"} or "range" in spec:
+            if isinstance(value, bool):
+                raise ValueError(f"Field '{key}' must be numeric.")
             if value is None or value == "":
+                if nullable:
+                    normalized[key] = None
+                    continue
                 raise ValueError(f"Field '{key}' is required.")
             try:
                 numeric_value = float(value)
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Field '{key}' must be numeric.") from exc
-            min_value = spec.get("min")
-            max_value = spec.get("max")
+            if not math.isfinite(numeric_value):
+                raise ValueError(f"Field '{key}' must be finite.")
+            limits = spec.get("range")
+            min_value = spec.get("min", limits[0] if limits else None)
+            max_value = spec.get("max", limits[1] if limits else None)
             if min_value is not None and numeric_value < float(min_value):
                 raise ValueError(f"Field '{key}' is below the allowed minimum ({min_value}).")
             if max_value is not None and numeric_value > float(max_value):
                 raise ValueError(f"Field '{key}' exceeds the allowed maximum ({max_value}).")
             normalized[key] = numeric_value
-        elif field_type == "string":
+        elif field_type == "string" or "allowed_values" in spec:
             if value is None:
                 raise ValueError(f"Field '{key}' is required.")
             text_value = str(value).strip()
@@ -102,20 +136,19 @@ def validate_features(payload: Any) -> Dict[str, Any]:
                 raise ValueError(f"Field '{key}' must be one of {allowed_values}.")
             normalized[key] = text_value
 
-    required_fields = schema.get("required_raw_features", [])
     missing_fields = [field for field in required_fields if field not in normalized]
     if missing_fields:
         raise ValueError(f"Missing required fields: {missing_fields}")
 
-    if "total_rooms" in normalized and "households" in normalized:
-        households = float(normalized["households"])
-        normalized["rooms_per_household"] = float(normalized["total_rooms"]) / households if households != 0 else 0.0
-    if "total_bedrooms" in normalized and "total_rooms" in normalized:
-        total_rooms = float(normalized["total_rooms"])
-        normalized["bedrooms_per_room"] = float(normalized["total_bedrooms"]) / total_rooms if total_rooms != 0 else 0.0
-    if "population" in normalized and "households" in normalized:
-        households = float(normalized["households"])
-        normalized["population_per_household"] = float(normalized["population"]) / households if households != 0 else 0.0
+    if normalized.get("total_rooms") is not None and normalized.get("households") is not None:
+        households = normalized["households"] or 1.0
+        normalized["rooms_per_household"] = normalized["total_rooms"] / households
+    if normalized.get("total_bedrooms") is not None and normalized.get("total_rooms") is not None:
+        total_rooms = normalized["total_rooms"] or 1.0
+        normalized["bedrooms_per_room"] = normalized["total_bedrooms"] / total_rooms
+    if normalized.get("population") is not None and normalized.get("households") is not None:
+        households = normalized["households"] or 1.0
+        normalized["population_per_household"] = normalized["population"] / households
 
     return normalized
 
@@ -180,6 +213,22 @@ def get_model_info() -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail={"error": "ai_service_unavailable", "detail": str(exc)}) from exc
 
 
+@app.get("/api/schema")
+def get_input_schema() -> Dict[str, Any]:
+    input_specs = schema.get("input_features")
+    if not isinstance(input_specs, dict):
+        feature_schema = schema.get("feature_schema", {})
+        required_features = schema.get("required_raw_features", feature_schema.keys())
+        input_specs = {
+            name: spec for name, spec in feature_schema.items()
+            if name in required_features
+        }
+    return {
+        "target_column": schema.get("target_column", "median_house_value"),
+        "input_features": input_specs,
+    }
+
+
 @app.get("/api/history")
 def prediction_history() -> Dict[str, Any]:
     try:
@@ -240,6 +289,14 @@ async def predict(request: Request) -> JSONResponse:
         collection.insert_one(record)
     except Exception as exc:  # pragma: no cover - DB connectivity issue
         logger.exception("Failed to save prediction record for request_id=%s", request_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "history_unavailable",
+                "detail": "Prediction could not be saved.",
+                "request_id": request_id,
+            },
+        ) from exc
 
     final_response = {
         "prediction": ai_result.get("prediction"),
