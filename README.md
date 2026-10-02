@@ -201,12 +201,11 @@ Tunnel chỉ truy cập được khi máy host, Docker containers và tiến tr�
 - **App / Frontend (local, xác nhận đang chạy):** <http://localhost:3000>
 - **Backend API (local, xác nhận đang chạy):** <http://localhost:8000/docs>
 - **AI Service API / Swagger (local, xác nhận đang chạy):** <http://localhost:8001/docs>
-- **Public URL ngrok trước đó:** `https://applicant-underrate-psychic.ngrok-free.dev`
-  - Kết quả kiểm tra thực tế từ môi trường hiện tại: HTTP 404, nghĩa là tunnel/URL cũ không còn hoạt động hoặc không còn forward tới service.
-  - Do đó, URL public cũ cần được xem như **stale / chưa xác nhận** cho tới khi ngrok được khởi động lại và kiểm tra lại.
-- **Kết quả kiểm tra ngày 02/10/2026:** local stack đang chạy khỏe, với `/health` của FE/BE/AI đều trả HTTP 200 trên localhost; public tunnel cũ không còn phản hồi đúng.
+- **App / Frontend (public qua ngrok):** <https://applicant-underrate-psychic.ngrok-free.dev>
+- **Kiểm tra ngày 03/10/2026:** public `/health`, trang chính, `/api/schema` và `/api/history` trả HTTP 200; tunnel forward tới `http://localhost:3000`. Không gửi dự đoán mới trong lần kiểm tra này.
+- **Lưu ý khi mở link:** ngrok có thể hiển thị trang cảnh báo `ERR_NGROK_6024` trước khi chuyển tiếp tới ứng dụng. Sau khi tiếp tục qua cảnh báo, các endpoint đã kiểm tra trả về nội dung từ ứng dụng.
 
-Domain Dev tự gán cho tài khoản thường giữ nguyên hostname qua các lần khởi động lại, nhưng URL chỉ truy cập được khi tunnel đang chạy và forward đúng tới ứng dụng. Tại lần kiểm tra ngày 03/10/2026, URL trên trả HTTP 404 ở `/health` và trang gốc; vì vậy hiện chưa xác nhận URL public hoạt động. Sau khi khởi động ngrok, kiểm tra lại `/health` và `/api/predict` trước khi chia sẻ URL. Nhóm kiểm tra URL vào mỗi thứ Hai (hoặc sớm hơn nếu có thay đổi).
+Domain Dev tự gán cho tài khoản thường giữ nguyên hostname qua các lần khởi động lại, nhưng URL chỉ truy cập được khi tunnel đang chạy và forward đúng tới ứng dụng. Nhóm kiểm tra URL và `/health` vào mỗi thứ Hai (hoặc sớm hơn nếu có thay đổi).
 
 ## 12. Nhật ký đổi cổng/tunnel (thời điểm đổi, địa chỉ cũ → mới)
 
@@ -214,6 +213,7 @@ Domain Dev tự gán cho tài khoản thường giữ nguyên hostname qua các 
 | ------------------ | ---------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | 2026-10-02 14:31 +07:00 | `https://applicant-underrate-psychic.ngrok-free.dev` | Không xác nhận / công khai mới | URL cũ trả `HTTP 404` khi kiểm tra từ môi trường hiện tại; cần khởi động lại hoặc cấp URL mới. |
 | Chưa xác nhận      | Không có dữ liệu | `http://localhost:3000`                      | Bản chạy local đã được kiểm tra hoạt động thành công.                                          |
+| 2026-10-03 01:27 +07:00 | `https://applicant-underrate-psychic.ngrok-free.dev` | `https://applicant-underrate-psychic.ngrok-free.dev` | URL giữ nguyên; tunnel hoạt động, `/health`, trang chính, `/api/schema` và `/api/history` trả HTTP 200 sau khi bỏ qua trang cảnh báo ngrok. |
 
 Mỗi thứ Hai, kiểm tra URL hiện hành và `/health`. Nếu URL không đổi, không cần thay địa chỉ tại mục 11; có thể ghi nhận lần kiểm tra. Nếu URL thực sự đổi, cập nhật mục 11 và thêm một dòng ghi ngày cùng URL cũ → mới.
 
